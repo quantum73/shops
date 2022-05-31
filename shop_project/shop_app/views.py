@@ -17,7 +17,10 @@ class CityViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.Gen
     def get_streets(self, request, pk=None):
         city_queryset = self.queryset.filter(id=pk)
         if not city_queryset.exists():
-            return Response(f"City with ID number #{pk} does not exist", status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                dict(results=[f"City with ID number #{pk} does not exist"]),
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         streets = city_queryset.first().streets.all()
         street_page = self.paginate_queryset(streets)
@@ -59,10 +62,12 @@ class ShopViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, viewsets.Gener
         data["street"] = street_obj
 
         serializer = self.get_serializer(data=data)
-        serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
-        headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+        if serializer.is_valid():
+            self.perform_create(serializer)
+            headers = self.get_success_headers(serializer.data)
+            return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()
@@ -78,7 +83,10 @@ class ShopViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, viewsets.Gener
             queryset = queryset.filter(city__name=city)
         if open_:
             if open_ not in self.open_choices:
-                return Response("Parameter \"open\" must be 0 or 1", status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    dict(results=["Parameter \"open\" must be 0 or 1"]),
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
             curr_time = datetime.time(datetime.utcnow())
             if open_ == "0":
