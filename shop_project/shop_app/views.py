@@ -1,12 +1,12 @@
 from datetime import datetime
 
+from django.db.models import Q
 from rest_framework import viewsets, mixins, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from .models import City, Shop, Street
-from .serializers import CitySerializer, ShopSerializer
-from .utils import str_time_to_object_time, time_is_valid
+from .serializers import CitySerializer, ShopSerializer, StreetSerializer
 
 
 class CityViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
@@ -15,11 +15,18 @@ class CityViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.Gen
 
     @action(methods=['GET'], detail=True, url_path='street', url_name='get_streets')
     def get_streets(self, request, pk=None):
-        street_queryset = Street.objects.filter(city=pk).all()
-        return Response(
-            dict(streets=[i.name for i in street_queryset]),
-            status=status.HTTP_200_OK
-        )
+        city_queryset = self.queryset.filter(id=pk)
+        if not city_queryset.exists():
+            return Response(f"City with ID number #{pk} does not exist", status=status.HTTP_400_BAD_REQUEST)
+
+        streets = city_queryset.first().streets.all()
+        street_page = self.paginate_queryset(streets)
+        if street_page is not None:
+            serializer = StreetSerializer(street_page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.StreetSerializer(streets, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class ShopViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, viewsets.GenericViewSet):
@@ -29,39 +36,27 @@ class ShopViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, viewsets.Gener
 
     def create(self, request, *args, **kwargs):
         data = request.data
-        open_time = data.get("open_time")
-        close_time = data.get("close_time")
-        if not time_is_valid(open_time):
-            return Response("Incorrect open_time format", status=status.HTTP_400_BAD_REQUEST)
-        if not time_is_valid(close_time):
-            return Response("Incorrect close_time format", status=status.HTTP_400_BAD_REQUEST)
-
-        data["open_time"] = str_time_to_object_time(open_time)
-        data["close_time"] = str_time_to_object_time(close_time)
-
         city = data.get("city")
         street = data.get("street")
         city_obj = City.objects.filter(name=city)
         street_obj = Street.objects.filter(name=street)
+        if not city_obj.exists():
+            city_obj = City(name=city)
+            city_obj.save()
+        else:
+            city_obj = city_obj.first()
+        if not street_obj.exists():
+            street_obj = Street(name=street)
+            street_obj.save()
+        else:
+            street_obj = street_obj.first()
 
-        # city = data.get("city")
-        # city_obj = City.objects.filter(name=city)
-        # if not city_obj.exists():
-        #     city_obj = City(name=city)
-        #     city_obj.save()
-        # else:
-        #     city_obj = city_obj.first()
-        #
-        # street = data.get("street")
-        # street_obj = Street.objects.filter(name=street, city=city_obj)
-        # if not street_obj.exists():
-        #     street_obj = Street(name=street, city=city_obj)
-        #     street_obj.save()
-        # else:
-        #     street_obj = street_obj.first()
+        city_and_street_relate = city_obj.streets.filter(name=street)
+        if not city_and_street_relate.exists():
+            city_obj.streets.add(street_obj)
 
-        data["city"] = city_obj.pk
-        data["street"] = street_obj.pk
+        data["city"] = city_obj
+        data["street"] = street_obj
 
         serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
@@ -76,19 +71,20 @@ class ShopViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, viewsets.Gener
         street = query_params.get("street")
         city = query_params.get("city")
         open_ = query_params.get("open")
-        if open_ not in self.open_choices:
-            return Response("Parameter \"open\" must be 0 or 1", status=status.HTTP_400_BAD_REQUEST)
 
-        # if street:
-        #     queryset = queryset.filter(street=street)
-        # if city:
-        #     queryset = queryset.filter(city=city)
+        if street:
+            queryset = queryset.filter(street__name=street)
+        if city:
+            queryset = queryset.filter(city__name=city)
         if open_:
-            curr_time = datetime.time(datetime.now())
+            if open_ not in self.open_choices:
+                return Response("Parameter \"open\" must be 0 or 1", status=status.HTTP_400_BAD_REQUEST)
+
+            curr_time = datetime.time(datetime.utcnow())
             if open_ == "0":
-                queryset = queryset.filter(close_time__gte=curr_time, open_time__lt=curr_time)
+                queryset = queryset.filter(Q(close_time__gte=curr_time) | Q(open_time__lt=curr_time))
             else:
-                queryset = queryset.filter(open_time__gte=curr_time, close_time__lt=curr_time)
+                queryset = queryset.filter(Q(open_time__gte=curr_time) & Q(close_time__lt=curr_time))
 
         page = self.paginate_queryset(queryset)
         if page is not None:
