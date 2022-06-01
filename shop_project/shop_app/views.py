@@ -28,7 +28,7 @@ class CityViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.Gen
             serializer = StreetSerializer(street_page, many=True)
             return self.get_paginated_response(serializer.data)
 
-        serializer = self.StreetSerializer(streets, many=True)
+        serializer = StreetSerializer(streets, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
