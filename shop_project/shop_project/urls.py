@@ -22,4 +22,3 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include((shop_router, 'shop_app'))),
 ]
-# urlpatterns += shop_router

@@ -3,7 +3,7 @@ from django.db import models
 
 
 class City(models.Model):
-    name = models.CharField(max_length=128, unique=True, verbose_name='city_name')
+    name = models.CharField(max_length=128, verbose_name='city_name')
 
     class Meta:
         verbose_name = 'город'
@@ -14,8 +14,7 @@ class City(models.Model):
 
 
 class Street(models.Model):
-    name = models.CharField(max_length=128, unique=True, verbose_name='street_name')
-    cities = models.ManyToManyField('City', related_name="streets")
+    name = models.CharField(max_length=128, verbose_name='street_name')
 
     class Meta:
         verbose_name = 'улица'
@@ -26,7 +25,7 @@ class Street(models.Model):
 
 
 class Shop(models.Model):
-    name = models.CharField(max_length=128, unique=True, verbose_name='shop_name')
+    name = models.CharField(max_length=128, verbose_name='shop_name')
     city = models.ForeignKey(
         'City',
         on_delete=models.CASCADE,
